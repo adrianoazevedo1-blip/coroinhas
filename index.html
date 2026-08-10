@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Escala dos Coroinhas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+/* ====================================================================
+   COLOQUE AQUI SUAS DUAS CHAVES DO SUPABASE (Configurações > API)
+   ==================================================================== */
+const SUPABASE_URL = "https://hdunbgjlbypesrkhwtqe.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_0by_lyzo0xtllGQbOfNoBQ_M3a2ZWYQ";
+/* ==================================================================== */
+
+const { useState, useEffect, useMemo } = React;
+
+const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const WD_ABBR = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+const iso = (y, m, d) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+const CONFIGURADO = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
+const sb = CONFIGURADO ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+/* ------------------------------- Ícones -------------------------------- */
+const Svg = (p) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={p.s || 18} height={p.s || 18} viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
+    {p.children}
+  </svg>
+);
+const IChevronLeft = (p) => <Svg {...p}><polyline points="15 18 9 12 15 6" /></Svg>;
+const IChevronRight = (p) => <Svg {...p}><polyline points="9 18 15 12 9 6" /></Svg>;
+const IPlus = (p) => <Svg {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Svg>;
+const ITrash = (p) => <Svg {...p}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></Svg>;
+const ICheck = (p) => <Svg {...p}><polyline points="20 6 9 17 4 12" /></Svg>;
+const IX = (p) => <Svg {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Svg>;
+const ISearch = (p) => <Svg {...p}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></Svg>;
+const IPrinter = (p) => <Svg {...p}><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></Svg>;
+const ICross = (p) => <Svg {...p}><line x1="12" y1="3" x2="12" y2="21" /><line x1="6" y1="9" x2="18" y2="9" /></Svg>;
+
+/* --------------------------- Datas / instâncias ------------------------ */
+function monthInstances(recurring, festive, y, m) {
+  const last = new Date(y, m + 1, 0).getDate();
+  const out = [];
+  for (let d = 1; d <= last; d++) {
+    const wd = new Date(y, m, d).getDay();
+    const dISO = iso(y, m, d);
+    recurring.forEach(r => {
+      if (r.weekday === wd) out.push({ id: `${dISO}#${r.id}`, dateISO: dISO, weekday: wd, label: r.label, time: r.time, festive: false });
+    });
+    festive.forEach(f => {
+      if (f.dateISO === dISO) out.push({ id: `${dISO}#f${f.id}`, dateISO: dISO, weekday: wd, label: f.label, time: f.time || "", festive: true });
+    });
+  }
+  out.sort((a, b) => a.dateISO === b.dateISO ? (a.time || "").localeCompare(b.time || "") : a.dateISO.localeCompare(b.dateISO));
+  return out;
+}
+function fmtDate(dISO) {
+  const [y, m, d] = dISO.split("-").map(Number);
+  const wd = new Date(y, m - 1, d).getDay();
+  return { wd, wdName: WEEKDAYS[wd], abbr: WD_ABBR[wd], dm: `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}` };
+}
+function weekendKey(dISO) {
+  const [y, m, d] = dISO.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  if (dt.getDay() === 0) dt.setDate(dt.getDate() - 1);
+  return iso(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
+/* ------------------------------ Dados (Supabase) ----------------------- */
+function useDados() {
+  const [coroinhas, setCoroinhas] = useState([]);
+  const [recurring, setRecurring] = useState([]);
+  const [festive, setFestive] = useState([]);
+  const [assignments, setAssignments] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+
+  async function carregar() {
+    if (!sb) { setLoading(false); return; }
+    try {
+      const [c, mf, mfe, mar] = await Promise.all([
+        sb.from("coroinhas").select("*").order("nome"),
+        sb.from("missas_fixas").select("*"),
+        sb.from("missas_festivas").select("*").order("data"),
+        sb.from("marcacoes").select("*"),
+      ]);
+      const e = c.error || mf.error || mfe.error || mar.error;
+      if (e) throw e;
+      setCoroinhas(c.data.map(x => ({ id: x.id, nome: x.nome, responsavel: x.responsavel || "" })));
+      setRecurring(mf.data.map(x => ({ id: x.id, label: x.label, weekday: x.weekday, time: x.time })));
+      setFestive(mfe.data.map(x => ({ id: x.id, dateISO: x.data, label: x.label, time: x.time || "" })));
+      const a = {};
+      mar.data.forEach(m => { (a[m.instancia_id] = a[m.instancia_id] || []).push(m.coroinha_id); });
+      setAssignments(a);
+      setErro(null);
+    } catch (e) {
+      setErro(e.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function acao(criar) {
+    setSalvando(true);
+    try {
+      const res = await criar();
+      if (res && res.error) throw res.error;
+      await carregar();
+    } catch (e) {
+      setErro(e.message || String(e));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return {
+    coroinhas, recurring, festive, assignments, loading, erro, salvando,
+    addCoroinha: (nome, responsavel) => acao(() => sb.from("coroinhas").insert({ nome, responsavel })),
+    removeCoroinha: (id) => acao(() => sb.from("coroinhas").delete().eq("id", id)),
+    addRecurring: (o) => acao(() => sb.from("missas_fixas").insert(o)),
+    updRecurring: (id, patch) => acao(() => sb.from("missas_fixas").update(patch).eq("id", id)),
+    removeRecurring: (id) => acao(() => sb.from("missas_fixas").delete().eq("id", id)),
+    addFestive: (o) => acao(() => sb.from("missas_festivas").insert({ data: o.dateISO, label: o.label, time: o.time })),
+    removeFestive: (id) => acao(() => sb.from("missas_festivas").delete().eq("id", id)),
+    marcar: (instanciaId, ids) => acao(() => sb.from("marcacoes").upsert(ids.map(cid => ({ instancia_id: instanciaId, coroinha_id: cid })), { onConflict: "instancia_id,coroinha_id", ignoreDuplicates: true })),
+    desmarcar: (instanciaId, ids) => acao(() => sb.from("marcacoes").delete().eq("instancia_id", instanciaId).in("coroinha_id", ids)),
+  };
+}
+
+/* --------------------------------- App --------------------------------- */
+function App() {
+  const api = useDados();
+  const [view, setView] = useState("escala");
+
+  if (!CONFIGURADO) return <TelaConfig />;
+
+  if (api.loading) {
+    return <div className="min-h-screen bg-stone-100 flex items-center justify-center"><p className="text-stone-500 font-serif text-lg">Carregando…</p></div>;
+  }
+
+  const data = { coroinhas: api.coroinhas, recurring: api.recurring, festive: api.festive, assignments: api.assignments };
+
+  return (
+    <div className="min-h-screen bg-stone-100 text-stone-800">
+      <header className="bg-red-900 text-stone-50 print:hidden">
+        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
+          <div className="bg-stone-50 text-red-900 rounded-full p-2"><ICross s={22} /></div>
+          <div className="leading-tight">
+            <h1 className="font-serif text-xl">Escala dos Coroinhas</h1>
+            <p className="text-red-200 text-xs">Paróquia — marque as missas do seu filho</p>
+          </div>
+        </div>
+        <div className="max-w-3xl mx-auto px-4 flex gap-1">
+          <Tab active={view === "escala"} onClick={() => setView("escala")} label="Escala" />
+          <Tab active={view === "admin"} onClick={() => setView("admin")} label="Administração" />
+        </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-4 py-5">
+        {api.erro && <div className="mb-4 text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2">Ocorreu um erro: {api.erro}</div>}
+        {view === "escala"
+          ? <Escala data={data} marcar={api.marcar} desmarcar={api.desmarcar} />
+          : <Admin data={data} api={api} />}
+      </main>
+
+      {api.salvando && <div className="fixed bottom-4 right-4 bg-stone-800 text-white text-xs rounded-full px-3 py-1.5 shadow-lg print:hidden">Salvando…</div>}
+
+      <footer className="max-w-3xl mx-auto px-4 pb-8 pt-2 text-center text-xs text-stone-400 print:hidden">Escala dos Coroinhas</footer>
+    </div>
+  );
+}
+
+function TelaConfig() {
+  return (
+    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
+      <div className="max-w-md bg-white border border-stone-300 rounded-lg p-6 text-center">
+        <h1 className="font-serif text-xl text-red-900 mb-2">Falta configurar o Supabase</h1>
+        <p className="text-sm text-stone-600">Abra o arquivo <b>index.html</b> e cole sua <b>URL</b> e sua <b>chave anon</b> nas duas linhas do topo, onde está escrito COLE_AQUI.</p>
+      </div>
+    </div>
+  );
+}
+
+function Tab({ active, onClick, label }) {
+  return (
+    <button onClick={onClick}
+      className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${active ? "bg-stone-100 text-red-900" : "text-red-100 hover:bg-red-800"}`}>
+      {label}
+    </button>
+  );
+}
+
+/* ------------------------------ Escala (pais) -------------------------- */
+function Escala({ data, marcar, desmarcar }) {
+  const now = new Date();
+  const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
+  const [sel, setSel] = useState([]);
+  const [busca, setBusca] = useState("");
+
+  const instances = useMemo(() => monthInstances(data.recurring, data.festive, ym.y, ym.m), [data.recurring, data.festive, ym]);
+  const byDate = useMemo(() => {
+    const g = {};
+    instances.forEach(i => { (g[i.dateISO] = g[i.dateISO] || []).push(i); });
+    return g;
+  }, [instances]);
+
+  const coroFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const arr = [...data.coroinhas].sort((a, b) => a.nome.localeCompare(b.nome));
+    if (!q) return arr;
+    return arr.filter(c => c.nome.toLowerCase().includes(q) || (c.responsavel || "").toLowerCase().includes(q));
+  }, [data.coroinhas, busca]);
+
+  const toggleSel = id => setSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  function toggleMissa(instId) {
+    if (sel.length === 0) return;
+    const atual = data.assignments[instId] || [];
+    const todosDentro = sel.every(id => atual.includes(id));
+    if (todosDentro) desmarcar(instId, sel);
+    else marcar(instId, sel.filter(id => !atual.includes(id)));
+  }
+  const nomeDe = id => (data.coroinhas.find(c => c.id === id) || {}).nome || "?";
+  const changeMonth = delta => { let m = ym.m + delta, y = ym.y; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } setYm({ y, m }); };
+  const dias = Object.keys(byDate);
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <StepTitle n="1" title="Quem vai servir?" hint="Toque no nome. Pode escolher vários de uma vez." />
+        <div className="relative mb-3">
+          <span className="absolute left-3 top-3 text-stone-400"><ISearch s={16} /></span>
+          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome ou responsável…"
+            className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-stone-300 bg-white placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-red-800" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {coroFiltrados.map(c => {
+            const on = sel.includes(c.id);
+            return (
+              <button key={c.id} onClick={() => toggleSel(c.id)}
+                className={`text-left px-3 py-2.5 rounded-lg border transition-colors ${on ? "bg-red-800 border-red-800 text-white" : "bg-white border-stone-300 hover:border-red-700"}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`shrink-0 w-5 h-5 rounded-full border flex items-center justify-center ${on ? "bg-white border-white" : "border-stone-400"}`}>
+                    {on && <span className="text-red-800"><ICheck s={13} /></span>}
+                  </span>
+                  <span className="leading-tight">
+                    <span className="block text-sm font-medium">{c.nome}</span>
+                    <span className={`block text-xs ${on ? "text-red-100" : "text-stone-400"}`}>{c.responsavel}</span>
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+          {coroFiltrados.length === 0 && <p className="col-span-2 text-sm text-stone-400 py-4 text-center">Nenhum coroinha encontrado.</p>}
+        </div>
+        {sel.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-2.5">
+            <span className="text-xs text-red-900 font-medium">Selecionados:</span>
+            {sel.map(id => (
+              <span key={id} className="inline-flex items-center gap-1 bg-white text-red-900 border border-red-300 rounded-full pl-2.5 pr-1 py-0.5 text-xs">
+                {nomeDe(id)}
+                <button onClick={() => toggleSel(id)} className="hover:bg-red-100 rounded-full p-0.5"><IX s={12} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <StepTitle n="2" title="Em quais missas?" hint="Toque na missa para marcar ou desmarcar quem você escolheu." />
+        <div className="flex items-center justify-between bg-white border border-stone-300 rounded-lg px-2 py-2 mb-3">
+          <button onClick={() => changeMonth(-1)} className="p-2 rounded-md hover:bg-stone-100 text-stone-600"><IChevronLeft s={20} /></button>
+          <span className="font-serif text-lg text-center">{MONTHS[ym.m]} de {ym.y}</span>
+          <button onClick={() => changeMonth(1)} className="p-2 rounded-md hover:bg-stone-100 text-stone-600"><IChevronRight s={20} /></button>
+        </div>
+
+        {sel.length === 0 && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">Escolha ao menos um coroinha no passo 1 para poder marcar.</p>}
+
+        <div className="space-y-3">
+          {dias.length === 0 && <p className="text-stone-400 text-sm text-center py-6">Nenhuma missa neste mês.</p>}
+          {dias.map(dISO => {
+            const f = fmtDate(dISO);
+            return (
+              <div key={dISO} className="bg-white border border-stone-300 rounded-lg overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2 bg-stone-50 border-b border-stone-200">
+                  <span className="font-serif text-base text-red-900">{f.abbr}, {f.dm}</span>
+                  <span className="text-xs text-stone-400">{f.wdName}</span>
+                </div>
+                <div className="divide-y divide-stone-100">
+                  {byDate[dISO].map(inst => {
+                    const nomes = data.assignments[inst.id] || [];
+                    const todosDentro = sel.length > 0 && sel.every(id => nomes.includes(id));
+                    return (
+                      <div key={inst.id} className="px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{inst.label}</span>
+                              {inst.festive && <span className="text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-0.5">Festiva</span>}
+                            </div>
+                            <span className="text-xs text-stone-500">{inst.time} · {nomes.length} {nomes.length === 1 ? "coroinha" : "coroinhas"}</span>
+                          </div>
+                          <button disabled={sel.length === 0} onClick={() => toggleMissa(inst.id)}
+                            className={`shrink-0 text-sm font-medium rounded-lg px-3 py-2 transition-colors ${sel.length === 0 ? "bg-stone-100 text-stone-400" : todosDentro ? "bg-stone-200 text-stone-700 hover:bg-stone-300" : "bg-red-800 text-white hover:bg-red-900"}`}>
+                            {todosDentro ? "Desmarcar" : "Marcar"}
+                          </button>
+                        </div>
+                        {nomes.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {nomes.map(id => <span key={id} className="text-xs bg-stone-100 text-stone-700 rounded-full px-2 py-0.5">{nomeDe(id)}</span>)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function StepTitle({ n, title, hint }) {
+  return (
+    <div className="flex items-start gap-3 mb-3">
+      <span className="shrink-0 w-8 h-8 rounded-full bg-red-900 text-stone-50 font-serif flex items-center justify-center">{n}</span>
+      <div>
+        <h2 className="font-serif text-lg leading-tight">{title}</h2>
+        <p className="text-xs text-stone-500">{hint}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------- Administração --------------------------- */
+function Admin({ data, api }) {
+  const [sub, setSub] = useState("coroinhas");
+  return (
+    <div>
+      <div className="flex gap-2 mb-5">
+        {[["coroinhas", "Coroinhas"], ["missas", "Missas"], ["relatorios", "Relatórios"]].map(([k, l]) => (
+          <button key={k} onClick={() => setSub(k)}
+            className={`text-sm px-3 py-1.5 rounded-full border ${sub === k ? "bg-red-800 border-red-800 text-white" : "bg-white border-stone-300 text-stone-600"}`}>{l}</button>
+        ))}
+      </div>
+      {sub === "coroinhas" && <AdminCoroinhas data={data} api={api} />}
+      {sub === "missas" && <AdminMissas data={data} api={api} />}
+      {sub === "relatorios" && <Relatorios data={data} />}
+    </div>
+  );
+}
+
+function AdminCoroinhas({ data, api }) {
+  const [nome, setNome] = useState("");
+  const [resp, setResp] = useState("");
+  function add() { if (!nome.trim()) return; api.addCoroinha(nome.trim(), resp.trim()); setNome(""); setResp(""); }
+  const ordenados = [...data.coroinhas].sort((a, b) => a.nome.localeCompare(b.nome));
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-stone-300 rounded-lg p-4">
+        <h3 className="font-serif text-base mb-3">Cadastrar coroinha</h3>
+        <div className="grid sm:grid-cols-2 gap-2 mb-2">
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome do coroinha" className="px-3 py-2 rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-red-800" />
+          <input value={resp} onChange={e => setResp(e.target.value)} placeholder="Responsável (pai/mãe)" className="px-3 py-2 rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-red-800" />
+        </div>
+        <button onClick={add} className="flex items-center gap-2 bg-red-800 text-white text-sm font-medium rounded-lg px-4 py-2 hover:bg-red-900"><IPlus s={16} /> Adicionar</button>
+      </div>
+      <div className="bg-white border border-stone-300 rounded-lg divide-y divide-stone-100">
+        {ordenados.map(c => (
+          <div key={c.id} className="flex items-center justify-between px-4 py-2.5">
+            <div><span className="text-sm font-medium">{c.nome}</span><span className="block text-xs text-stone-400">{c.responsavel || "—"}</span></div>
+            <button onClick={() => api.removeCoroinha(c.id)} className="text-stone-400 hover:text-red-700 p-1.5"><ITrash s={16} /></button>
+          </div>
+        ))}
+        {ordenados.length === 0 && <p className="text-sm text-stone-400 text-center py-6">Nenhum coroinha cadastrado.</p>}
+      </div>
+    </div>
+  );
+}
+
+function AdminMissas({ data, api }) {
+  const [rData, setRData] = useState({ label: "", weekday: 6, time: "19:00" });
+  const [fData, setFData] = useState({ date: "", label: "", time: "19:00" });
+  function addRec() { if (!rData.label.trim()) return; api.addRecurring({ label: rData.label.trim(), weekday: rData.weekday, time: rData.time }); setRData({ label: "", weekday: 6, time: "19:00" }); }
+  function addFest() { if (!fData.date || !fData.label.trim()) return; api.addFestive({ dateISO: fData.date, label: fData.label.trim(), time: fData.time }); setFData({ date: "", label: "", time: "19:00" }); }
+  const festOrd = [...data.festive].sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-stone-300 rounded-lg p-4">
+        <h3 className="font-serif text-base mb-1">Missas fixas (toda semana)</h3>
+        <p className="text-xs text-stone-500 mb-3">Estas se repetem todo fim de semana. Ajuste, adicione ou remova conforme sua paróquia.</p>
+        <div className="space-y-2">
+          {data.recurring.map(r => (
+            <div key={r.id} className="flex flex-wrap gap-2 items-center">
+              <input value={r.label} onChange={e => api.updRecurring(r.id, { label: e.target.value })} className="w-full sm:flex-1 min-w-0 px-2 py-2 text-sm rounded-md border border-stone-300 focus:outline-none focus:ring-2 focus:ring-red-800" />
+              <select value={r.weekday} onChange={e => api.updRecurring(r.id, { weekday: Number(e.target.value) })} className="flex-1 min-w-0 px-2 py-2 text-sm rounded-md border border-stone-300 bg-white">
+                {WEEKDAYS.map((w, i) => <option key={i} value={i}>{w}</option>)}
+              </select>
+              <input type="time" value={r.time} onChange={e => api.updRecurring(r.id, { time: e.target.value })} className="w-28 px-2 py-2 text-sm rounded-md border border-stone-300" />
+              <button onClick={() => api.removeRecurring(r.id)} className="text-stone-400 hover:text-red-700 p-2"><ITrash s={16} /></button>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-stone-100 mt-3 pt-3">
+          <p className="text-xs font-medium text-stone-600 mb-2">Adicionar missa fixa</p>
+          <div className="flex flex-wrap gap-2">
+            <input value={rData.label} onChange={e => setRData({ ...rData, label: e.target.value })} placeholder="Nome da missa" className="w-full sm:flex-1 min-w-0 px-2 py-2 text-sm rounded-md border border-stone-300 focus:outline-none focus:ring-2 focus:ring-red-800" />
+            <select value={rData.weekday} onChange={e => setRData({ ...rData, weekday: Number(e.target.value) })} className="flex-1 min-w-0 px-2 py-2 text-sm rounded-md border border-stone-300 bg-white">
+              {WEEKDAYS.map((w, i) => <option key={i} value={i}>{w}</option>)}
+            </select>
+            <input type="time" value={rData.time} onChange={e => setRData({ ...rData, time: e.target.value })} className="w-28 px-2 py-2 text-sm rounded-md border border-stone-300" />
+          </div>
+          <button onClick={addRec} className="flex items-center gap-2 mt-2 bg-red-800 text-white text-sm font-medium rounded-lg px-4 py-2 hover:bg-red-900"><IPlus s={16} /> Adicionar missa fixa</button>
+        </div>
+      </div>
+
+      <div className="bg-white border border-stone-300 rounded-lg p-4">
+        <h3 className="font-serif text-base mb-3">Missas festivas / eventuais</h3>
+        <div className="flex flex-wrap gap-2 mb-2">
+          <input type="date" value={fData.date} onChange={e => setFData({ ...fData, date: e.target.value })} className="w-full sm:flex-1 min-w-0 px-2 py-2 text-sm rounded-md border border-stone-300" />
+          <input value={fData.label} onChange={e => setFData({ ...fData, label: e.target.value })} placeholder="Nome da missa" className="w-full sm:flex-1 min-w-0 px-2 py-2 text-sm rounded-md border border-stone-300 focus:outline-none focus:ring-2 focus:ring-red-800" />
+          <input type="time" value={fData.time} onChange={e => setFData({ ...fData, time: e.target.value })} className="w-28 px-2 py-2 text-sm rounded-md border border-stone-300" />
+        </div>
+        <button onClick={addFest} className="flex items-center gap-2 bg-amber-700 text-white text-sm font-medium rounded-lg px-4 py-2 hover:bg-amber-800"><IPlus s={16} /> Adicionar missa festiva</button>
+        <div className="mt-3 divide-y divide-stone-100">
+          {festOrd.map(f => {
+            const d = fmtDate(f.dateISO);
+            return (
+              <div key={f.id} className="flex items-center justify-between py-2">
+                <span className="text-sm">{d.dm} · {f.label} <span className="text-stone-400">({f.time})</span></span>
+                <button onClick={() => api.removeFestive(f.id)} className="text-stone-400 hover:text-red-700 p-1.5"><ITrash s={16} /></button>
+              </div>
+            );
+          })}
+          {festOrd.length === 0 && <p className="text-sm text-stone-400 text-center py-3">Nenhuma missa festiva.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Relatorios({ data }) {
+  const now = new Date();
+  const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
+  const [filtro, setFiltro] = useState("");
+  const instances = useMemo(() => monthInstances(data.recurring, data.festive, ym.y, ym.m), [data.recurring, data.festive, ym]);
+  const nomeDe = id => (data.coroinhas.find(c => c.id === id) || {}).nome || "?";
+  const grupos = useMemo(() => {
+    const g = {};
+    instances.forEach(i => { (g[weekendKey(i.dateISO)] = g[weekendKey(i.dateISO)] || []).push(i); });
+    return Object.keys(g).sort().map(k => ({ key: k, itens: g[k] }));
+  }, [instances]);
+  const tally = useMemo(() => {
+    const t = {};
+    instances.forEach(i => (data.assignments[i.id] || []).forEach(id => { t[id] = (t[id] || 0) + 1; }));
+    return Object.entries(t).sort((a, b) => b[1] - a[1]);
+  }, [instances, data.assignments]);
+  const changeMonth = delta => { let m = ym.m + delta, y = ym.y; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } setYm({ y, m }); };
+  const mostra = id => !filtro || id === filtro;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+        <div className="flex items-center gap-1 bg-white border border-stone-300 rounded-lg px-1 py-1">
+          <button onClick={() => changeMonth(-1)} className="p-1.5 rounded hover:bg-stone-100"><IChevronLeft s={18} /></button>
+          <span className="font-serif px-2">{MONTHS[ym.m]} {ym.y}</span>
+          <button onClick={() => changeMonth(1)} className="p-1.5 rounded hover:bg-stone-100"><IChevronRight s={18} /></button>
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <select value={filtro} onChange={e => setFiltro(e.target.value)} className="flex-1 sm:flex-none min-w-0 text-sm px-2 py-2 rounded-lg border border-stone-300 bg-white">
+            <option value="">Todos os coroinhas</option>
+            {[...data.coroinhas].sort((a, b) => a.nome.localeCompare(b.nome)).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+          <button onClick={() => window.print()} className="flex items-center gap-1.5 text-sm bg-stone-800 text-white rounded-lg px-3 py-2 hover:bg-stone-900 shrink-0"><IPrinter s={15} /> Imprimir</button>
+        </div>
+      </div>
+      <h3 className="font-serif text-xl hidden print:block">Escala — {MONTHS[ym.m]} de {ym.y}</h3>
+      <div className="space-y-3">
+        {grupos.map(({ key, itens }) => {
+          const datas = Array.from(new Set(itens.map(i => fmtDate(i.dateISO).dm)));
+          return (
+            <div key={key} className="bg-white border border-stone-300 rounded-lg overflow-hidden">
+              <div className="px-4 py-2 bg-stone-50 border-b border-stone-200 font-serif text-red-900">{datas.length > 1 ? `Fim de semana · ${datas.join(" e ")}` : datas[0]}</div>
+              <div className="divide-y divide-stone-100">
+                {itens.map(inst => {
+                  const nomes = (data.assignments[inst.id] || []).filter(mostra);
+                  const f = fmtDate(inst.dateISO);
+                  return (
+                    <div key={inst.id} className="px-4 py-2.5">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-sm font-medium">{f.abbr} · {inst.label}</span>
+                        <span className="text-xs text-stone-400">{inst.time}</span>
+                        {inst.festive && <span className="text-xs bg-amber-100 text-amber-800 rounded-full px-2">Festiva</span>}
+                      </div>
+                      {nomes.length > 0 ? <p className="text-sm text-stone-600 mt-0.5">{nomes.map(nomeDe).join(", ")}</p> : <p className="text-xs text-stone-300 mt-0.5">— sem coroinhas —</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {grupos.length === 0 && <p className="text-stone-400 text-sm text-center py-6">Nenhuma missa neste mês.</p>}
+      </div>
+      {!filtro && tally.length > 0 && (
+        <div className="bg-white border border-stone-300 rounded-lg p-4">
+          <h4 className="font-serif text-base mb-2">Total de missas por coroinha no mês</h4>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+            {tally.map(([id, n]) => (
+              <div key={id} className="flex justify-between text-sm border-b border-stone-100 py-0.5"><span className="text-stone-700">{nomeDe(id)}</span><span className="text-stone-500 font-medium">{n}</span></div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
