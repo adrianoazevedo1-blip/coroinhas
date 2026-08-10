@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Escala dos Coroinhas</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      @page { size: A4 landscape; margin: 12mm; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
   <script>
     /* ===== SUAS CHAVES DO SUPABASE (edite aqui se um dia precisar) ===== */
     window.SUPABASE_URL = "https://hdunbgjlbypesrkhwtqe.supabase.co";
