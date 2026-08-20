@@ -1,0 +1,38 @@
+-- ============================================================
+--  Cadastro dos coroinhas do Santuário (rode UMA vez só).
+--  Cole tudo no SQL Editor do Supabase e clique em RUN.
+-- ============================================================
+insert into coroinhas (nome, responsavel) values
+  ('Clarice Maria',    'Cristiana / Adriano'),
+  ('Iasmim Maria',     'Cristiana / Adriano'),
+  ('Melissa Maria',    'Cristiana / Adriano'),
+  ('Miguel',           'Luciana / André'),
+  ('Gabriel',          'Luciana / André'),
+  ('Felipe',           'Luciana / André'),
+  ('Maria',            'Jacyra / Arthur'),
+  ('Arthur Filho',     'Jacyra / Arthur'),
+  ('João',             'Jacyra / Arthur'),
+  ('Lavinia',          'Claudiane'),
+  ('Maria Sofia',      'Claudio Roberto'),
+  ('Artur Reis',       'Claudio Roberto'),
+  ('Isabela Maniçoba', 'Cristiane Maniçoba'),
+  ('Bernardo Caixeta', 'Alexandra Caixeta ou Rafael'),
+  ('Izabela Felix',    'Joelma'),
+  ('Catarina Pequeno', 'Sandra ou Cláudio Pequeno'),
+  ('Maria Teresa',     'Sandra ou Cláudio Pequeno'),
+  ('Isis Santana',     'Simone Santana'),
+  ('Matheus Pereira',  'Vanessa ou Fernando'),
+  ('Arthur Pereira',   'Vanessa ou Fernando'),
+  ('Ester',            'Fábio'),
+  ('Alexandre',        'Alexandre'),
+  ('Maria Júlia',      'Luana'),
+  ('João Magno',       'Ricardo ou Kênia'),
+  ('Arthur Mazoni',    'Andreia Mazoni'),
+  ('Ícaro',            'Isis'),
+  ('Helena',           'Luciana Viotti ou Rodolfo'),
+  ('Sofia',            'Maria Teresa'),
+  ('Yasmim Brito',     'Andreia Brito ou Nildo'),
+  ('José Guilherme',   'Andreia Brito ou Nildo'),
+  ('João Alberto',     'Andreia Brito ou Nildo'),
+  ('Lucas',            'Adriana Leite'),
+  ('Júlia Guerra',     'Mãe da Júlia');
